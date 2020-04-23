@@ -1,0 +1,28 @@
+---
+map:
+- name: switch:arista
+  metric: entPhysicalSerialNum
+  labels:
+    serial: entPhysicalSerialNum
+    location: hostname
+    brand: _brand
+    model: _model
+    extra:
+    - entPhysicalDescr
+  type: Switch
+  ignore_regexp:
+  - entPhysicalIndex: '^(1.+|(?!1.*))'
+  join:
+  - metric: entPhysicalMfgName
+    labels:
+      _brand: entPhysicalMfgName
+    index:
+    - entPhysicalIndex
+    - hostname
+  - metric: entPhysicalModelName
+    labels:
+      _model: entPhysicalModelName
+    index:
+    - entPhysicalIndex
+    - hostname
+

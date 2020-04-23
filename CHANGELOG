@@ -1,0 +1,15 @@
+* 0.0.3 - Nuno Tavares <n.tavares@portavita.eu>
+  FIX lookups bug: you need multiple fields for lookups, specifically 'hostname' (location). Added nosetest
+  ADD support for non-authenticated get_results() - to use in kubernetes, as an imported module
+  MOD Refactored nosetests framework, for fixtures
+
+* 0.0.2 - Nuno Tavares <n.tavares@portavita.eu>
+  REF to Python 3
+  ADD nosetests, very basic for now
+  ADD several types: UPS, PDU, Switch, SFP
+  ADD Introduced metric join'ing capability, to allow a single rule to collect data from multiple related metrics
+  ADD ignore_regex support for matching a missing label
+
+* 0.0.1 - Nuno Tavares <n.tavares@portavita.eu>
+  Initial implementation
+

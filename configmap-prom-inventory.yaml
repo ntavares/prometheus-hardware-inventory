@@ -1,0 +1,324 @@
+---
+#
+# This file intructs the parser how to build a database (DB) row: with which metrics (results)
+# to collect and parse, how to parse them, how to deal with duplicates or dicard results;
+#
+# map:
+# - name: <a name for this block, to be referred to by --only or --except>
+#   description: <(optional) anything here is not used anywhere in the code, it's just for documentation purposes>
+#   metric: <metric name to be fetched from Prometheus>
+#   labels:
+#     <field>: <metric label> | [ <list of metric labels that can provide a value>, ... ]
+#     extra:
+#     - <labels to be concatenated together in field "extra">
+#   static:
+#     <field>: <const>
+#   type: <field "type" value>
+#   regexp:
+#     <label>: <regexp with capture group names using field names>
+#   collisions: <what to do if it detects a collision (e.g. megaraid_pd_info, smartmon_device_info), see note [1]>
+#   ignore_regexp:
+#     - <metric label>: <regexp to match when row is meant to be ignored - see note [2] -, or None if you want to match (exclude from results) if the label is missing>
+#   join:
+#     - <a standard metric definition (like the above), to be joined with the parent base on index, below. See also [3]>
+#       index:
+#         - <metric labels that can be used to link a value from the parent "metric" and the lookup>
+#
+# Expected labels: brand, model, serial, location
+#
+# [1] Collisions are verified based on type,model,location - see PrometheusInventory.push_row()
+# [2] Smartmon reports controllers and VDs as results, but lacks a lot of info
+#
+
+
+map:
+
+- name: raid:megaraid
+  metric: megaraid_controller_info
+  labels:
+    model: model
+    serial: serial
+    location: hostname
+  static:
+    brand: LSI
+  type: RAID Controller
+
+- name: disk:megaraid
+  metric: megaraid_pd_info
+  labels:
+    location: hostname
+#    model: model
+    serial: serial
+#    brand: manufacturer
+    extra:
+    - media
+    - interface
+    model: model
+  type: Disk
+  collisions: override
+  regexp:
+    model: ^(?P<brand>(?!.*ST930060)\S+)\s+(?P<model>.*)$
+
+- name: disk:hpsa
+  metric: hpsa_physicaldrive_info
+  labels:
+    model: model
+    location: hostname
+    serial: serial
+    extra:
+    - speed
+  regexp:
+    model: ^(?P<brand>\S+)\s+(?P<model>.*)$
+  type: Disk
+
+- name: bbu:hpsa
+  description: TODO - needs to be implemented in the exporter!
+  metric: hpsa_cache_info
+  labels:
+    location: hostname
+    serial: serial
+    extra:
+    - size
+  type: BBU
+
+- name: raid:hpsa
+  description: TODO - needs to be implemented in the exporter!
+  metric: hpsa_controller_info
+  labels:
+    location: hostname
+    serial: serial
+    model: model
+  static:
+    brand: HP
+  type: RAID Controller
+
+- name: disk:smartmon
+  description: |
+    The goal of this rule was to be able to complement incomplete info from the RAID controllers, but it's hard to correlate the data
+    TODO - Maybe it should be used as a lookup instead, and as a specfic source for disks that are not under RAID controllers?
+  metric: smartmon_device_info
+  labels:
+    location: hostname
+#    model: [ product, device_model ]
+    serial: serial_number
+#    brand: vendor
+  collisions: override
+  type: Disk
+  ignore_regexp:
+  - type: ^scsi$
+  - type: ^3ware,.*$
+  regexp:
+    device_model: ^(?P<brand>(?!.*ST930060)\S+)\s+(?P<model>.*)$
+
+- name: bbu:tw_cli
+  metric: tw_cli_bbu_info
+  labels:
+    location: hostname
+    serial: serial
+  static:
+    brand: 3ware
+    model: BBU
+  type: BBU
+
+- name: raid:tw_cli
+  metric: tw_cli_controller_info
+  labels:
+    location: hostname
+    serial: serial
+    model: model
+  static:
+    brand: 3ware
+  type: RAID Controller
+
+- name: disk:tw_cli
+  metric: tw_cli_drive_info
+  labels:
+    location: hostname
+    serial: serial
+    model: model
+  regexp:
+    model: ^(?P<brand>\S+)
+  type: Disk
+
+- name: bbu:megaraid
+  metric: megaraid_cv_info
+  labels:
+    brand: manufacturer
+    serial: serial
+    location: hostname
+    model: type
+  type: BBU
+
+- name: sfp:arista
+  metric: entPhysicalSerialNum
+  labels:
+    serial: entPhysicalSerialNum
+    location: hostname
+    brand: _brand
+    model: _model
+    extra:
+    - entPhysicalDescr
+    - entPhysicalIndex
+  type: SFP
+  ignore_regexp:
+  - hostname: '^some-switches-to-ignore$'
+  - entPhysicalDescr: '^(?!Xcvr for Ethernet)'
+  join:
+  - metric: entPhysicalMfgName
+    labels:
+      _brand: entPhysicalMfgName
+    index:
+    - entPhysicalIndex
+    - hostname
+  - metric: entPhysicalModelName
+    labels:
+      _model: entPhysicalModelName
+    index:
+    - entPhysicalIndex
+    - hostname
+
+- name: ups
+  metric: upsAdvIdentSerialNumber
+  labels:
+    serial: upsAdvIdentSerialNumber
+    location: hostname
+    model: _model
+    extra: _extra
+  static:
+    brand: APC
+  type: UPS
+  join:
+  - metric: upsBasicIdentModel
+    labels:
+      _model: upsBasicIdentModel
+    index:
+    - hostname
+  - metric: upsAdvIdentSkuNumber
+    labels:
+      _extra: upsAdvIdentSkuNumber
+    index:
+    - hostname
+
+- name: pdu
+  metric: rPDU2IdentSerialNumber
+  labels:
+    serial: rPDU2IdentSerialNumber
+    location: hostname
+    model: _model
+  static:
+    brand: APC
+  type: PDU
+  join:
+  - metric: rPDU2IdentModelNumber
+    labels:
+      _model: rPDU2IdentModelNumber
+    index:
+    - hostname
+
+
+- name: switch:arista
+  metric: entPhysicalSerialNum
+  labels:
+    serial: entPhysicalSerialNum
+    location: hostname
+    brand: _brand
+    model: _model
+    extra:
+    - entPhysicalDescr
+  type: Switch
+  ignore_regexp:
+  - hostname: '^some-switches-to-ignore$'
+  - entPhysicalIndex: '^(1.+|(?!1.*))'
+  join:
+  - metric: entPhysicalMfgName
+    labels:
+      _brand: entPhysicalMfgName
+    index:
+    - entPhysicalIndex
+    - hostname
+  - metric: entPhysicalModelName
+    labels:
+      _model: entPhysicalModelName
+    index:
+    - entPhysicalIndex
+    - hostname
+
+- name: switch:powerconnect
+  metric: entPhysicalSerialNum
+  labels:
+    serial: entPhysicalSerialNum
+    location: hostname
+    model: entPhysicalDescr
+  static:
+    brand: DELL
+  type: Switch
+  ignore_regexp:
+  - hostname: '^some-switches-to-ignore$'
+  - hostname: '^more-switches-to-ignore$'
+  - entPhysicalIndex: '^(?!67108992)$'
+
+- name: switch:hp-v1910
+  metric: entPhysicalSerialNum
+  labels:
+    location: hostname
+    model: entPhysicalModelName
+    serial: entPhysicalSerialNum
+    brand: entPhysicalMfgName
+  type: Switch
+  ignore_regexp:
+  - hostname: '^some-switches-to-ignore$'
+  - entPhysicalIndex: '^(1.+|(?!1.*))'
+
+- name: sfp:hp-v1910
+  metric: entPhysicalSerialNum
+  labels:
+    serial: entPhysicalSerialNum
+    location: hostname
+    brand: entPhysicalMfgName
+    extra:
+    - entPhysicalName
+#    - entPhysicalIndex
+  type: SFP
+  ignore_regexp:
+  - hostname: '^some-switches-to-ignore$'
+  - entPhysicalName: '(?!.*GigabitEthernet1/0/5[1-2]).*$'
+  - entPhysicalSerialNum:
+  - entPhysicalModelName: '^HP V1910-48G .*'
+
+# Supermicro switches do not provide a serial :-(
+# Or maybe the current SNMP role is not listing the necessary OIDs?
+- name: switch:supermicro
+  metric: sysDescr
+  labels:
+    location: hostname
+  static:
+    brand: SUPERMICRO
+  regexp:
+    sysDescr: ^.*witch +(?P<model>.+)$
+  type: Switch
+  ignore_regexp:
+  - hostname: '^some-switches-to-ignore$'
+
+- name: servers
+  metric: node_dmi_hardware_info
+  labels:
+    location: hostname
+    brand: manufacturer
+    model: productname
+    serial: serialnumber
+  type: Server
+
+- name: memory
+  metric: node_dmi_memory_device
+  labels:
+    location: hostname
+    brand: manufacturer
+    model: partnumber
+    serial: serialnumber
+    extra:
+    - formfactor
+    - type
+    - speed
+    - size
+  type: Memory
+
